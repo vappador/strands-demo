@@ -1,0 +1,32 @@
+
+id: "REQ-1234"
+title: "Add /health endpoint"
+language: "python"
+repo:
+  url: "https://github.com/ORG/REPO.git"
+  default_branch: "main"
+branch:
+  feature_id: "1234"
+  name_template: "feature/{feature_id}-health"
+build:
+  container_image: "python:3.11-slim"
+  workdir: "/workspace"
+  command: |
+    bash -lc "pip install -U pip &&         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi &&         pytest -q"
+  env: {}
+  timeout_seconds: 900
+  cpu_shares: 512
+  mem_limit: "2g"
+codegen:
+  description: |
+    Implement a FastAPI /health endpoint returning JSON {"ok": true} with 200 status.
+    If FastAPI app is not present, create minimal app under app/main.py and tests under tests/test_health.py.
+  test_expectations:
+    - "GET /health returns 200"
+    - "Response JSON has key ok == true"
+github:
+  create_pr: true
+  base: "main"
+  reviewers: ["org/maintainers"]
+  labels: ["feature", "automation"]
+  draft: false
