@@ -83,14 +83,14 @@ def _smart_call(fn, *, req: Requirement, ws: Optional[Dict[str, Any]] = None,
     raise TypeError(f"Could not match arguments for tool '{getattr(target, '__name__', target)}'. Signature={sig}.")
 
 @tool(name="run_requirement_pipeline", description="Run end-to-end pipeline from requirement YAML → PR.")
-def run_requirement_pipeline(requirement_source: str, verbose: bool = False) -> dict:
+def run_requirement_pipeline(requirement_source: str) -> dict:
     """
     Orchestrates: load → prepare → plan → generate → apply → test → commit/push → PR
-    Returns structured result with a per-stage timeline when verbose=True (and still useful defaults otherwise).
+    Controlled by VERBOSE_RUN env var for whether to collect a timeline.
     """
+    verbose = os.getenv("VERBOSE_RUN", "0") not in ("0", "", "false", "False")
     t0 = time.time()
     timeline: List[Dict[str, Any]] = []
-
     def _stage(name: str, fn, **kwargs):
         s0 = time.time()
         log.info("orchestrator: → %s", name)

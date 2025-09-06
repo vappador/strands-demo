@@ -8,6 +8,15 @@ services:
     container_name: strands-codeops-agent
     env_file:
       - .env
+    environment:
+      # Verbose pipeline timeline & richer logs (toggle in .env or here)
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - VERBOSE_RUN=${VERBOSE_RUN:-1}
+      # Silence accidental AWS IMDS lookups during local dev
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_METADATA_SERVICE_TIMEOUT=1
+      - AWS_METADATA_SERVICE_NUM_ATTEMPTS=1
+      - BOTO_CONFIG=/dev/null
     command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8088 --reload
     working_dir: /workspace
     ports:

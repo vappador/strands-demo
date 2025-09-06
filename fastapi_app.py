@@ -21,6 +21,11 @@ _agent = make_agent()
 
 class RunRequest(BaseModel):
     requirement_source: str
+    # verbose removed — driven by env
+
+
+class RunRequest(BaseModel):
+    requirement_source: str
     verbose: Optional[bool] = False
 
 class RunResponse(BaseModel):
@@ -44,6 +49,6 @@ async def health():
 @app.post("/run", response_model=RunResponse)
 async def run(req: RunRequest):
     def _call():
-        # pass verbose through to the tool
-        return _agent.tool.run_requirement_pipeline(requirement_source=req.requirement_source, verbose=req.verbose or False)
+        return _agent.tool.run_requirement_pipeline(requirement_source=req.requirement_source)
     return await asyncio.to_thread(_call)
+
