@@ -1,4 +1,3 @@
-# app/orchestrator.py
 from __future__ import annotations
 
 import inspect
@@ -30,6 +29,7 @@ def _value_for(name: str, *, req: Requirement, ws: Optional[Dict[str, Any]], pla
         "requirement": req, "req": req, "r": req,
         "run_id": run_id, "rid": run_id,
         "ws": ws, "workspace": ws,
+        "repo_url": str(getattr(getattr(req, "repo", None), "url", "")),
         "repo_dir": repo_dir, "workdir": repo_dir, "cwd": repo_dir, "root": repo_dir, "path": repo_dir,
         "plan": plan, "plan_context": plan,
         "changes": changes, "diff": changes, "edits": changes, "patches": changes,
@@ -41,45 +41,43 @@ def _value_for(name: str, *, req: Requirement, ws: Optional[Dict[str, Any]], pla
 
 def _smart_call(fn, *, req: Requirement, ws: Optional[Dict[str, Any]] = None,
                 plan: Any = None, changes: Any = None, test_result: Any = None) -> Any:
+    """
+    Invoke a @tool function safely. We pass ONLY keyword arguments so we don't
+    accidentally bind positional parameters like `tool_context` to strings (e.g., repo_dir).
+    """
     target = _underlying_callable(fn)
     sig = inspect.signature(target)
 
-    args: List[Any] = []
+    # Build kwargs only
     kwargs: Dict[str, Any] = {}
-
     for p in sig.parameters.values():
         if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
             continue
         val = _value_for(p.name, req=req, ws=ws, plan=plan, changes=changes, test_result=test_result)
         if val is inspect._empty:
             continue
-        if p.kind == p.POSITIONAL_ONLY:
-            args.append(val)
-        elif p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY):
-            kwargs[p.name] = val
-    log.debug("smart_call: target=%s args=%r kwargs=%r", getattr(target, "__name__", str(target)), args, kwargs)
-    try:
-        return fn(*args, **kwargs)
-    except TypeError as te:
-        log.warning("smart_call: primary TypeError: %s; trying fallbacks", te)
+        kwargs[p.name] = val  # always keyword, never positional
 
-    # Fallback shapes
-    run_id = req.id
+    log.debug("smart_call: target=%s kwargs=%r", getattr(target, "__name__", str(target)), kwargs)
+    try:
+        return fn(**kwargs)
+    except TypeError as te:
+        log.warning("smart_call: primary TypeError: %s; trying keyword-only fallbacks", te)
+
+    # Fallback: keyword-only variants (no positional args to avoid misbinding)
     repo_dir = (ws or {}).get("repo_dir") if isinstance(ws, dict) else None
-    candidates: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = [
-        ((req, repo_dir), {}),
-        ((run_id, req, repo_dir), {}),
-        ((req,), {}),
-        ((repo_dir,), {}),
-        ((req, plan, repo_dir), {}),
-        ((), {"requirement": req, "repo_dir": repo_dir, "plan": plan, "changes": changes, "test_result": test_result}),
+    kw_fallbacks: List[Dict[str, Any]] = [
+        {"requirement": req, "repo_dir": repo_dir},
+        {"req": req, "cwd": repo_dir},
+        {"requirement": req, "repo_dir": repo_dir, "plan": plan, "changes": changes, "test_result": test_result},
     ]
-    for i, (a, kw) in enumerate(candidates, 1):
+    for i, kw in enumerate(kw_fallbacks, 1):
         try:
-            log.debug("smart_call: fallback #%d %s(*%r, **%r)", i, getattr(target, "__name__", str(target)), a, kw)
-            return fn(*a, **kw)
+            log.debug("smart_call: fallback #%d %s(**%r)", i, getattr(target, "__name__", str(target)), kw)
+            return fn(**kw)
         except TypeError as te:
             log.debug("smart_call: fallback #%d TypeError: %s", i, te)
+
     raise TypeError(f"Could not match arguments for tool '{getattr(target, '__name__', target)}'. Signature={sig}.")
 
 @tool(name="run_requirement_pipeline", description="Run end-to-end pipeline from requirement YAML → PR.")
@@ -91,12 +89,12 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
     verbose = os.getenv("VERBOSE_RUN", "0") not in ("0", "", "false", "False")
     t0 = time.time()
     timeline: List[Dict[str, Any]] = []
+
     def _stage(name: str, fn, **kwargs):
         s0 = time.time()
         log.info("orchestrator: → %s", name)
         try:
             out = _smart_call(fn, **kwargs)
-            ok = True
             return out
         finally:
             dur = round(time.time() - s0, 3)
@@ -106,7 +104,6 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
                 preview = None
                 try:
                     if isinstance(out, dict):
-                        # store small preview of dict output
                         preview = {k: out[k] for k in list(out)[:5]}
                 except Exception:
                     pass
@@ -164,7 +161,7 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
         exit_code = (test_result or {}).get("status")
         logs = (test_result or {}).get("logs", "")
         # strict success only if tests passed (0 or "0")
-        success = str(exit_code) in ("0", "None") or exit_code == 0  # tolerate runners that don’t set it; tweak if you want stricter
+        success = str(exit_code) in ("0", "None") or exit_code == 0
         status = "success" if success else "error"
 
         return {
