@@ -11,6 +11,7 @@ os.environ.setdefault("OLLAMA_HOST", os.getenv("OLLAMA_HOST", "http://localhost:
 os.environ.setdefault("STRANDS_MODEL", os.getenv("STRANDS_MODEL", "qwen2.5-coder:3b"))
 
 from strands import Agent
+from strands.models.ollama import OllamaModel
 from app.tools.requirements_tool import load_requirement  # tool (kept)
 from app.tools.git_tools import prepare_workspace, commit_and_push
 from app.tools.code_tools import plan_changes, generate_changes, apply_changes, build_and_test
@@ -30,9 +31,14 @@ def make_agent() -> Agent:
             log.info("agent_main: OpenTelemetry configured")
     except Exception:
         log.debug("agent_main: OTEL not configured", exc_info=True)
-
+    #Use Ollama instead of bedrock default
+    model = OllamaModel(
+        host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+        model_id=os.getenv("STRANDS_MODEL", "qwen2.5-coder:3b")
+    )
     agent = Agent(
         name="codeops-agent",
+        model=model,
         description="Agent that reads requirements and turns them into PRs.",
         tools=[
             run_requirement_pipeline,  # orchestration tool
