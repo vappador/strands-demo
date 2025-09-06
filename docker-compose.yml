@@ -1,15 +1,55 @@
-# docker-compose.yml
 services:
   agent:
-    build: .
+    build:
+      context: .
+      # optional: pass args to cache installs, etc.
+      # args:
+      #   PIP_INDEX_URL: https://pypi.org/simple
     container_name: strands-codeops-agent
     env_file:
       - .env
-    volumes:
-      - ./:/workspace
-      - ./templates:/workspace/templates:ro   # <-- makes your templates visible in the container
-      - /var/run/docker.sock:/var/run/docker.sock
+    command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8088 --reload
     working_dir: /workspace
     ports:
       - "8088:8088"
+    volumes:
+      # Live code sync (fast iterate: no rebuild needed)
+      - ./:/workspace
+      # Template files (read-only is fine)
+      - ./templates:/workspace/templates:ro
+      # Needed if your agent builds/runs child containers for tests
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8088/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+    # Compose v2.22+ (Docker Desktop 4.24+) — automatic sync/rebuild
+    develop:
+      watch:
+        # 1) Sync most source changes instantly (container restarts via --reload)
+        - path: .
+          target: /workspace
+          action: sync
+          ignore:
+            - .git/
+            - .idea/
+            - .vscode/
+            - __pycache__/
+            - "**/*.pyc"
+            - .pytest_cache/
+            - jobs/
+            - .venv/
+        # 2) Rebuild the image if Python deps or base image change
+        - path: requirements.txt
+          action: rebuild
+        - path: Dockerfile
+          action: rebuild
+        # 3) Ensure template tweaks sync immediately
+        - path: templates
+          target: /workspace/templates
+          action: sync
