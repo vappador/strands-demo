@@ -1,0 +1,42 @@
+id: SD-TESTS-001
+title: "Add initial test suite for strands-demo"
+language: python
+
+repo:
+  url: "https://github.com/vappador/strands-demo"
+  default_branch: "main"
+
+branch:
+  feature_id: "sd-tests-001"           # final branch name will be "feature/sd-tests-001"
+
+build:
+  command: "pytest -q --maxfail=1 -vv"
+  container_image: "python:3.11-slim"
+  workdir: "/workspace/repo"           # this is where the repo is bind-mounted in DockerRunner
+  env:
+    PYTHONUNBUFFERED: "1"
+  timeout_seconds: 900
+
+github:
+  create_pr: true
+  base: "main"
+  reviewers: []
+  labels: ["tests", "automation"]
+  draft: false
+
+codegen:
+  description: |
+    Create a minimal pytest suite for the FastAPI app in this repository.
+    Include:
+    - Test that GET /health returns 200 and {"ok": true}.
+    - Smoke test for POST /run with a sample requirement_source; ensure it accepts input
+      and returns a JSON body with a "status" field. Do NOT perform real network or GitHub calls;
+      keep side effects mocked or avoided.
+    - Repo layout sanity check: assert presence of Dockerfile, docker-compose.yml, and
+      requirements.txt or pyproject.toml.
+    Keep changes small and idiomatic. Ensure tests run in the specified Docker image.
+  test_expectations:
+    - "pytest exit code is 0"
+    - "health endpoint returns ok"
+    - "run endpoint accepts requirement_source"
+    - "repo layout files exist"
