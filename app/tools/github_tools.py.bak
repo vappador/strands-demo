@@ -30,7 +30,7 @@ def open_pull_request(req: Requirement, owner: str, repo_name: str, head_branch:
                 f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr['number']}/requested_reviewers",
                 headers=headers,
                 json={"reviewers": [u for u in req.github.reviewers if "/" not in u],
-                    "team_reviewers": [u.split("/")[1] for u in req.github.reviewers if "/" in u]},
+                      "team_reviewers": [u.split("/")[1] for u in req.github.reviewers if "/" in u]},
                 timeout=30,
             )
             rv.raise_for_status()

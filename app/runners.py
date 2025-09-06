@@ -1,12 +1,12 @@
-
 from __future__ import annotations
 import os
 import docker
 from typing import Dict, Tuple
 
+
 class DockerRunner:
-    def __init__(self, image: str, workdir: str="/workspace", env: Dict[str,str] | None=None,
-                 cpu_shares: int | None=None, mem_limit: str | None=None, timeout_seconds: int=1800):
+    def __init__(self, image: str, workdir: str = "/workspace", env: Dict[str, str] | None = None,
+                 cpu_shares: int | None = None, mem_limit: str | None = None, timeout_seconds: int = 1800):
         self.client = docker.from_env()
         self.image = image
         self.workdir = workdir
@@ -39,5 +39,7 @@ class DockerRunner:
             return int(result.get("StatusCode", 1)), logs
         finally:
             if container is not None:
-                try: container.remove(force=True)
-                except Exception: pass
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
