@@ -5,6 +5,8 @@ import logging
 import os
 import time
 from typing import Any, Dict, Optional, Tuple, List
+from types import SimpleNamespace as _NS
+from app import runtime
 
 from strands import tool  # type: ignore
 
@@ -58,7 +60,19 @@ def _smart_call(fn, *, req: Requirement, ws: Optional[Dict[str, Any]] = None,
             continue
         kwargs[p.name] = val  # always keyword, never positional
 
-    log.debug("smart_call: target=%s kwargs=%r", getattr(target, "__name__", str(target)), kwargs)
+    param_names = [p.name for p in sig.parameters.values() if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)]
+
+    # If the tool expects a tool_context, provide one with the current Agent
+    if "tool_context" in param_names and "tool_context" not in kwargs:
+        agent = runtime.get_agent()
+        if agent is None:
+            log.error("smart_call: tool '%s' expects tool_context, but no Agent is registered", getattr(target, "__name__", str(target)))
+            raise TypeError("No Agent available to build tool_context")
+        kwargs["tool_context"] = _NS(agent=agent)
+
+    log.debug("smart_call: target=%s expected=%r provided=%r",
+              getattr(target, "__name__", str(target)), param_names, list(kwargs.keys()))
+
     try:
         return fn(**kwargs)
     except TypeError as te:

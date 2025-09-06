@@ -16,6 +16,7 @@ from app.tools.git_tools import prepare_workspace, commit_and_push
 from app.tools.code_tools import plan_changes, generate_changes, apply_changes, build_and_test
 from app.tools.github_tools import open_pull_request
 from app.orchestrator import run_requirement_pipeline
+from app import runtime
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def make_agent() -> Agent:
     except Exception:
         log.debug("agent_main: OTEL not configured", exc_info=True)
 
-    return Agent(
+    agent = Agent(
         name="codeops-agent",
         description="Agent that reads requirements and turns them into PRs.",
         tools=[
@@ -45,6 +46,8 @@ def make_agent() -> Agent:
             open_pull_request,
         ],
     )
+    runtime.set_agent(agent)
+    return agent
 
 if __name__ == "__main__":
     logging.basicConfig(
