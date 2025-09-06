@@ -1,7 +1,8 @@
-
 from __future__ import annotations
-from pydantic import BaseModel, Field, HttpUrl
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Any
+from pydantic import BaseModel, Field, HttpUrl, ValidationError
+
+# --- Your existing models (unchanged shape) ---
 
 class RepoSpec(BaseModel):
     url: HttpUrl
@@ -14,8 +15,8 @@ class BranchSpec(BaseModel):
         return self.name_template.format(feature_id=self.feature_id)
 
 class BuildSpec(BaseModel):
-    command: str = Field(description="Build/test command to run inside runner container")
-    container_image: str = Field(description="Docker image used for the build/test step")
+    command: str
+    container_image: str
     workdir: str = Field(default="/workspace")
     env: Dict[str, str] = Field(default_factory=dict)
     timeout_seconds: int = Field(default=1800)
@@ -43,3 +44,18 @@ class Requirement(BaseModel):
     github: Optional[GitHubSpec] = None
     codegen: CodeInstruction
     artifacts_dir: str = Field(default="/workspace/jobs/{id}")
+
+# --- Helper for compact, JSON-safe Pydantic error formatting ---
+
+def format_validation_errors(exc: ValidationError) -> List[Dict[str, Any]]:
+    """
+    Return a compact list like: [{"loc": [...], "msg": "...", "type": "..."}].
+    """
+    out: List[Dict[str, Any]] = []
+    for err in exc.errors():
+        out.append({
+            "loc": err.get("loc"),
+            "msg": err.get("msg"),
+            "type": err.get("type"),
+        })
+    return out
