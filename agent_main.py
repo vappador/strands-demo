@@ -4,6 +4,12 @@ import logging
 import os
 import uuid
 
+# Force a non-Bedrock provider and block AWS IMDS lookups *before* importing Agent.
+os.environ.setdefault("AWS_EC2_METADATA_DISABLED", "true")
+os.environ.setdefault("STRANDS_MODEL_PROVIDER", os.getenv("STRANDS_MODEL_PROVIDER", "ollama"))
+os.environ.setdefault("OLLAMA_HOST", os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+os.environ.setdefault("STRANDS_MODEL", os.getenv("STRANDS_MODEL", "qwen2.5-coder:3b"))
+
 from strands import Agent
 from app.tools.requirements_tool import load_requirement  # tool (kept)
 from app.tools.git_tools import prepare_workspace, commit_and_push
