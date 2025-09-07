@@ -66,6 +66,9 @@ services:
             - .pytest_cache/
             - jobs/
             - .venv/
+            - jobs/*
+        # 2) Rebuild the image if Python deps or base image change
+
         - path: requirements.txt
           action: rebuild
         - path: Dockerfile
