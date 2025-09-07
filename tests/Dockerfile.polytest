@@ -1,0 +1,51 @@
+# Polyglot test runner: Java (JDK 21 + Maven + Gradle), Node.js 20 + npm/yarn/pnpm, Python 3.11 + pip + pytest
+FROM eclipse-temurin:21-jdk
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Base tooling and Maven
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates gnupg git unzip zip tar xz-utils \
+      build-essential pkg-config jq \
+      python3 python3-pip python3-venv \
+      maven \
+  && rm -rf /var/lib/apt/lists/*
+
+# Gradle (pick a stable version)
+ARG GRADLE_VERSION=8.8
+RUN curl -fsSL https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -o /tmp/gradle.zip \
+  && unzip -d /opt /tmp/gradle.zip \
+  && ln -s /opt/gradle-${GRADLE_VERSION}/bin/gradle /usr/local/bin/gradle \
+  && rm /tmp/gradle.zip
+
+# Node.js 20 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get update && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
+
+# Global package managers
+RUN npm i -g pnpm@8 yarn@1
+
+# Default caches under /work (your mounted repo)
+ENV WORKDIR=/work
+ENV PIP_CACHE_DIR=$WORKDIR/.pip-cache \
+    NPM_CONFIG_CACHE=$WORKDIR/.npm \
+    PNPM_STORE_PATH=$WORKDIR/.pnpm-store \
+    YARN_CACHE_FOLDER=$WORKDIR/.yarn-cache \
+    GRADLE_USER_HOME=$WORKDIR/.gradle \
+    MAVEN_OPTS="-Dmaven.repo.local=$WORKDIR/.m2/repository" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR $WORKDIR
+
+# Auto-detect & test script
+RUN bash -lc 'cat > /usr/local/bin/polytest << "EOF"\n#!/usr/bin/env bash\nset -euo pipefail\nshopt -s nullglob\n\n# Options\nPROJECT_DIR=\"${1:-$WORKDIR}\"\nFORCE=\"${POLYTEST_FORCE:-}\"\nSKIP_INSTALL=\"${POLYTEST_INSTALL:-1}\"\n# SKIP_INSTALL=0 (default) means install deps; set to 1 to skip\nif [[ \"$SKIP_INSTALL\" != \"1\" ]]; then SKIP_INSTALL=0; else SKIP_INSTALL=1; fi\n\ncd \"$PROJECT_DIR\" 2>/dev/null || cd \"$WORKDIR\"\n\nlog(){ echo \"[polytest] $*\"; }\nrun(){ log \"$*\"; bash -lc \"$*\"; }\n\n# ---------- Python ----------\nrun_python(){\n  if [[ \"$SKIP_INSTALL\" -eq 0 ]]; then\n    run \"python3 -m pip install -U pip setuptools wheel\"\n    [[ -f requirements-dev.txt ]] && run \"pip install -r requirements-dev.txt\" || true\n    [[ -f requirements.txt ]]     && run \"pip install -r requirements.txt\"     || true\n    if [[ -f pyproject.toml ]]; then\n      # try editable + test extras, fallback to plain\n      run \"(pip install -e \\\".[test]\\\" || pip install -e . || true)\"\n    fi\n    # ensure pytest exists\n    run \"python3 - <<PY\\nimport sys, subprocess\\n\\ntry:\\n    import pytest  # noqa\\nexcept Exception:\\n    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pytest'])\\nPY\"\n  fi\n  # allow override\n  if [[ -n \"${POLYTEST_PY_CMD:-}\" ]]; then run \"$POLYTEST_PY_CMD\"; return; fi\n  run \"python3 -m pytest -q || pytest -q\"\n}\n\n# ---------- Node.js / TypeScript ----------\nrun_node(){\n  local PM=\"npm\" INSTALL_CMD=\"npm install\" TEST_CMD=\"npm test --silent\"\n  if [[ -f pnpm-lock.yaml ]]; then PM=\"pnpm\"; INSTALL_CMD=\"pnpm i --frozen-lockfile\"; TEST_CMD=\"pnpm test --silent\"; fi\n  if [[ -f yarn.lock ]]; then PM=\"yarn\"; INSTALL_CMD=\"yarn install --frozen-lockfile\"; TEST_CMD=\"yarn test --silent\"; fi\n  if [[ -f package-lock.json && \"$PM\" == \"npm\" ]]; then INSTALL_CMD=\"npm ci\"; fi\n\n  if [[ \"$SKIP_INSTALL\" -eq 0 ]]; then run \"$INSTALL_CMD\"; fi\n  # allow override\n  if [[ -n \"${POLYTEST_NODE_CMD:-}\" ]]; then run \"$POLYTEST_NODE_CMD\"; return; fi\n  # default test with fallbacks\n  run \"$TEST_CMD || npx --yes vitest run || npx --yes jest -w 1 || true\"\n}\n\n# ---------- Java (Maven/Gradle) ----------\nrun_maven(){\n  # allow override\n  if [[ -n \"${POLYTEST_MVN_CMD:-}\" ]]; then run \"$POLYTEST_MVN_CMD\"; return; fi\n  run \"mvn -q -B -DskipTests=false --no-transfer-progress test\"\n}\nrun_gradle(){\n  local GWRAP=\"./gradlew\"\n  if [[ -x \"$GWRAP\" ]]; then\n    if [[ -n \"${POLYTEST_GRADLE_CMD:-}\" ]]; then run \"$GWRAP ${POLYTEST_GRADLE_CMD}\"; return; fi\n    run \"$GWRAP test --no-daemon --console=plain\"\n  else\n    if [[ -n \"${POLYTEST_GRADLE_CMD:-}\" ]]; then run \"gradle ${POLYTEST_GRADLE_CMD}\"; return; fi\n    run \"gradle test --no-daemon --console=plain\"\n  fi\n}\n\n# ---------- Dispatch ----------\nif [[ -n \"$FORCE\" ]]; then\n  case \"$FORCE\" in\n    python|py) run_python; exit 0 ;;\n    node|js|ts|typescript|javascript) run_node; exit 0 ;;\n    maven|mvn|java) run_maven; exit 0 ;;\n    gradle|gradlew) run_gradle; exit 0 ;;\n    *) log \"Unknown POLYTEST_FORCE=$FORCE\"; exit 2 ;;\n  esac\nfi\n\n# Auto-detect order: Maven -> Gradle -> Node -> Python\nif [[ -f pom.xml ]]; then run_maven; exit 0; fi\nif [[ -f gradlew || -f build.gradle || -f build.gradle.kts ]]; then run_gradle; exit 0; fi\nif [[ -f package.json ]]; then run_node; exit 0; fi\nif [[ -f pyproject.toml || -f requirements.txt || -f requirements-dev.txt || -f setup.py ]]; then run_python; exit 0; fi\n\nlog \"No known project type detected in $(pwd). Provide POLYTEST_FORCE=python|node|maven|gradle or pass a custom command.\"\nexit 2\nEOF\nchmod +x /usr/local/bin/polytest'\n\n# Default to the helper but you can still provide a CMD via your runner\nENTRYPOINT [\"/usr/local/bin/polytest\"]\nCMD [\"/work\"]\n```
+
+---
+
+## Build it (once)
+
+```bash
+cd /Users/vijayappadorai/GitHub/strands-demo
+docker build -t strands/polytest:latest -f tests/Dockerfile.polytest .
