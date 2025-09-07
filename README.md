@@ -10,6 +10,7 @@ End-to-end automation from a **requirement template → PR**, exposed via an asy
 - Commit, push, and open a PR
 - Return a structured response (status, pr_url, logs)
 
+
 ## Project Structure
 ```
 strands-demo
@@ -40,7 +41,6 @@ strands-demo
     └── Dockerfile.polytest
 
 ```
-
 ## Class Diagram
 ```mermaid
 classDiagram
@@ -222,6 +222,55 @@ sequenceDiagram
 
 
 ```
+
+# Strands Demo Project Architecture
+
+The **Strands Demo** project is an autonomous code-ops agent built on [Strands Agents](https://strandsagents.com/).  
+It takes structured requirements (YAML), edits repositories, runs builds/tests inside Docker, and opens GitHub PRs automatically.
+
+---
+
+# Strands Demo Project Architecture
+
+The **Strands Demo** project is an autonomous code-ops agent built on [Strands Agents](https://strandsagents.com/).  
+It takes structured requirements (YAML), edits repositories, runs builds/tests inside Docker, and opens GitHub PRs automatically.
+
+---
+
+
+---
+
+# Option B — With Mermaid init (useful if your renderer needs it)
+
+```markdown
+# Strands Demo Project Architecture
+
+# Strands Demo Project Architecture
+
+## High-Level Workflow
+
+flowchart TD
+    A["Requirement YAML"] --> B["FastAPI Agent (fastapi_app.py)"]
+    B --> C["Orchestrator (agent_main.py / orchestrator.py)"]
+    C --> D["Code Tools (code_tools.py)"]
+    C --> E["DockerRunner (runners.py)"]
+    C --> F["GitHub Tools (git_tools.py + github_tools.py)"]
+
+    E -->|"BuildSpec"| H["Jobs Workspace"]
+    D --> H
+    F --> G["GitHub Repo (branch + PR)"]
+
+    subgraph Config_Infra
+        I["Dockerfile / docker-compose.yml"]
+        J["requirements.txt"]
+        K["templates/"]
+    end
+
+    I --> E
+    J --> E
+    K --> D
+
+
 ## REST API
 
 - `GET /health` → `{"ok": true}`
