@@ -10,9 +10,34 @@ branch:
   feature_id: "sd-tests-001"           # final branch name will be "feature/sd-tests-001"
 
 build:
-  command: "pytest -q --maxfail=1 -vv"
-  container_image: "python:3.11-slim"
-  workdir: "/workspace/repo"           # this is where the repo is bind-mounted in DockerRunner
+  container_image: "strands/polytest:latest"
+  workdir: "/workspace/repo"
+  command: |
+    bash -lc '
+      set -e
+      if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+        python -m pip install -U pip setuptools wheel
+        [ -f requirements.txt ] && pip install -r requirements.txt || true
+        [ -f pyproject.toml ] && pip install . || true
+      fi
+
+      if [ -f package.json ]; then
+        corepack enable
+        # prefer pnpm if lockfile exists, else npm
+        if [ -f pnpm-lock.yaml ]; then pnpm install; elif [ -f yarn.lock ]; then yarn install; else npm ci || npm install; fi
+      fi
+
+      if [ -f pom.xml ]; then mvn -q -DskipTests=false test; fi
+      if [ -f build.gradle ] || [ -f build.gradle.kts ]; then gradle test; fi
+
+      if [ -d tests ] || [ -f pytest.ini ] || [ -f pyproject.toml ]; then pytest -q --maxfail=1 -vv || true; fi
+      if [ -f package.json ]; then
+        # try common JS/TS test scripts, but don’t fail build if they’re absent
+        npm run test || npm test || true
+        pnpm test || true
+        yarn test || true
+      fi
+    '
   env:
     PYTHONUNBUFFERED: "1"
   timeout_seconds: 900

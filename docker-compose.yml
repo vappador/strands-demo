@@ -51,7 +51,7 @@ services:
             - __pycache__/
             - "**/*.pyc"
             - .pytest_cache/
-            - jobs/
+            - jobs/*
             - .venv/
         # 2) Rebuild the image if Python deps or base image change
         - path: requirements.txt
