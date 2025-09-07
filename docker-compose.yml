@@ -1,12 +1,27 @@
 services:
+  # Builds the polyglot test image and exits immediately.
+  polytest:
+    build:
+      context: .
+      dockerfile: Dockerfile.polytest
+      # Uncomment if you need to force a specific architecture on Apple Silicon:
+      # platforms:
+      #   - linux/amd64
+    image: strands/polytest:latest
+    command: ["/bin/true"]
+    # no volumes/ports needed
+
   agent:
     build:
       context: .
+    depends_on:
+      polytest:
+        condition: service_completed_successfully
+
     container_name: strands-codeops-agent
     env_file:
       - .env
     environment:
-      # Logs & timeline
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       VERBOSE_RUN: ${VERBOSE_RUN:-1}
 
@@ -21,11 +36,21 @@ services:
       OLLAMA_HOST: "http://host.docker.internal:11434"
       STRANDS_MODEL: "${STRANDS_MODEL:-qwen2.5-coder:3b}"
 
-    # Helps Linux users; harmless on macOS
+      # Make the runner use the prebuilt image
+      TEST_IMAGE: "strands/polytest:latest"
+      # Optionally force platform for the runner if needed (Apple Silicon):
+      # TEST_IMAGE_PLATFORM: "linux/amd64"
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-    command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8088 --reload
+    command: >
+      uvicorn fastapi_app:app --host 0.0.0.0 --port 8088 --reload
+      --reload-dir app
+      --reload-include 'app/**/*.py'
+      --reload-exclude 'jobs/*'
+      --reload-exclude 'jobs/**'
+
     working_dir: /workspace
     ports:
       - "8088:8088"
@@ -51,24 +76,21 @@ services:
     tty: true
     stdin_open: true
 
-    # Compose v2.22+ — live sync/rebuild
+    # Compose v2.22+ live sync/rebuild
     develop:
       watch:
         - path: .
           target: /workspace
           action: sync
           ignore:
-            - .git/
-            - .idea/
-            - .vscode/
-            - __pycache__/
+            - ".git/**"
+            - ".idea/**"
+            - ".vscode/**"
+            - "__pycache__/**"
             - "**/*.pyc"
-            - .pytest_cache/
-            - jobs/*
-            - .venv/
-            - jobs/*
-        # 2) Rebuild the image if Python deps or base image change
-
+            - ".pytest_cache/**"
+            - ".venv/**"
+            - "jobs/**"
         - path: requirements.txt
           action: rebuild
         - path: Dockerfile

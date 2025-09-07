@@ -45,6 +45,16 @@ class Requirement(BaseModel):
     codegen: CodeInstruction
     artifacts_dir: str = Field(default="/workspace/jobs/{id}")
 
+class ChangePlan(BaseModel):
+    summary: str
+    touched_files: List[str] = Field(default_factory=list)
+
+class FileEdit(BaseModel):
+    action: Literal["create", "modify", "delete"]
+    path: str
+    content: str
+
+
 # --- Helper for compact, JSON-safe Pydantic error formatting ---
 
 def format_validation_errors(exc: ValidationError) -> List[Dict[str, Any]]:

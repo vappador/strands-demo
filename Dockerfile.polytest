@@ -1,42 +1,37 @@
-# syntax=docker/dockerfile:1.7
-# Base on Python so pytest and friends are easy
-FROM python:3.11-slim AS base
+# docker/polytest.Dockerfile
+FROM openjdk:17-jdk-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8 TZ=UTC \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
 
-# ---- Common OS deps -------------------------------------------------
+# Base tools + Python + Maven + Gradle
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq bash \
-      build-essential \
-      openjdk-17-jdk maven gradle \
-    ; \
-    rm -rf /var/lib/apt/lists/*
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates curl git jq bash \
+    build-essential \
+    python3 python3-pip python3-venv \
+    maven gradle \
+  ; \
+  rm -rf /var/lib/apt/lists/*
 
-# ---- Node.js 20 LTS + Corepack (pnpm/yarn) --------------------------
-# Using NodeSource helper (fast + reliable for CI images)
+# Node.js 20.x via NodeSource + enable corepack (no global yarn install!)
 RUN set -eux; \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends nodejs; \
-    rm -rf /var/lib/apt/lists/*; \
-    corepack enable; \
-    npm --version && node --version
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
+  apt-get update && apt-get install -y --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*; \
+  corepack enable; \
+  corepack prepare pnpm@latest --activate; \
+  corepack prepare yarn@stable --activate; \
+  npm i -g typescript ts-node jest
 
-# ---- TypeScript tooling ---------------------------------------------
-# You can rely on per-project versions via corepack; we also add global TS for convenience
-RUN set -eux; \
-    npm i -g typescript ts-node
+# Python test deps
+RUN python3 -m pip install --no-cache-dir pytest pytest-cov tox
 
-# ---- Python quality of life -----------------------------------------
-# (pytest etc. are installed at test time from the project)
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Non-root user
+RUN useradd -ms /bin/bash builder
+USER builder
+WORKDIR /workspace
 
-# ---- Workdir matches your runner YAMLs -------------------------------
-# Your BuildSpec.workdir points here (e.g. /workspace/repo)
-WORKDIR /workspace/repo
-
-# The runner will set the exact test command; we keep the image idle-friendly.
-CMD ["bash"]
+CMD bash -lc 'python3 --version && node --version && npm --version && pnpm --version && yarn --version && tsc --version && java -version && mvn -v && gradle -v'
