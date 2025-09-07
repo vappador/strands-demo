@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import os
 from typing import List
-from pydantic import BaseModel
+
+from pydantic import BaseModel, Field
 from strands import tool, ToolContext
+
 from app.models import Requirement, BuildSpec
 from app.runners import DockerRunner
 
@@ -15,7 +18,12 @@ class FileEdit(BaseModel):
 
 class ChangePlan(BaseModel):
     summary: str
-    touched_files: List[str] = []
+    touched_files: List[str] = Field(default_factory=list)
+
+
+# Wrapper so providers can derive JSON Schema (Ollama/others expect a Pydantic model)
+class _FileEditList(BaseModel):
+    edits: List[FileEdit]
 
 
 @tool(context=True, name="plan_changes", description="Summarize repo & plan edits for the requirement.")
@@ -27,17 +35,25 @@ You are a senior engineer. Given this requirement, output a concise plan.
 REQUIREMENT TITLE: {req.title}
 REQ ID: {req.id}
 LANGUAGE: {req.language}
-CODE INSTRUCTION:\n{req.codegen.description}\n
-REPO INVENTORY (paths):\n{inventory}\n
-Return a JSON with fields: summary (string), touched_files (array of strings).
+CODE INSTRUCTION:
+{req.codegen.description}
+
+REPO INVENTORY (paths):
+{inventory}
+
+Return a JSON with fields:
+- summary (string)
+- touched_files (array of strings)
 """
     return tool_context.agent.structured_output(ChangePlan, prompt)
 
 
 def _scan_repo(repo_dir: str, max_files: int = 200) -> str:
-    out = []
+    out: List[str] = []
     for root, dirs, files in os.walk(repo_dir):
-        if any(seg.startswith(".") for seg in root.split(os.sep)): continue
+        # skip hidden directories like .git, .venv, etc.
+        if any(seg.startswith(".") for seg in root.split(os.sep)):
+            continue
         for f in files:
             if f.endswith((".py", ".ts", ".js", ".java", ".md", ".yml", ".yaml")):
                 rel = os.path.relpath(os.path.join(root, f), repo_dir)
@@ -49,28 +65,38 @@ def _scan_repo(repo_dir: str, max_files: int = 200) -> str:
 
 @tool(context=True, name="generate_changes", description="Generate concrete file edits for the requirement.")
 def generate_changes(tool_context: ToolContext, req: Requirement, plan: ChangePlan, repo_dir: str) -> List[FileEdit]:
-    schema_hint = "Return a JSON array of {action['create'|'modify'], path, content}."
+    # Ask the model to return: {"edits": [ {action, path, content}, ... ]}
+    schema_hint = (
+        "Return a JSON object with an 'edits' array: "
+        "{ edits: [ { action['create'|'modify'], path, content } ] }."
+    )
     test_hints = "\n".join(f"- {x}" for x in req.codegen.test_expectations)
     prompt = f"""
 You will propose precise file edits to implement the requirement.
 - Only return JSON. {schema_hint}
 - Prefer minimal changes.
-- Include unit tests matching these expectations:\n{test_hints}
+- Include unit tests matching these expectations:
+{test_hints}
 
-REQ ID: {req.id}\nTITLE: {req.title}\nLANGUAGE: {req.language}
-PLAN SUMMARY: {plan.summary}\nTOUCH LIST: {plan.touched_files}
+REQ ID: {req.id}
+TITLE: {req.title}
+LANGUAGE: {req.language}
+PLAN SUMMARY: {plan.summary}
+TOUCH LIST: {plan.touched_files}
 REPO ROOT: {repo_dir}
 """
-    return tool_context.agent.structured_output(List[FileEdit], prompt)
+    result = tool_context.agent.structured_output(_FileEditList, prompt)
+    return result.edits
 
 
 @tool(name="apply_changes", description="Apply file edits (create/modify) to working tree.")
 def apply_changes(repo_dir: str, edits: List[FileEdit]) -> dict:
-    applied = []
+    applied: List[str] = []
     for e in edits:
         target = os.path.join(repo_dir, e.path)
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        if e.action not in {"create", "modify"}: continue
+        if e.action not in {"create", "modify"}:
+            continue
         with open(target, "w", encoding="utf-8") as fh:
             fh.write(e.content)
         applied.append(e.path)
@@ -80,7 +106,13 @@ def apply_changes(repo_dir: str, edits: List[FileEdit]) -> dict:
 @tool(name="build_and_test", description="Run build & test in an ephemeral Docker runner.")
 def build_and_test(req: Requirement, repo_dir: str) -> dict:
     b: BuildSpec = req.build
-    runner = DockerRunner(image=b.container_image, workdir=b.workdir, env=b.env,
-                          cpu_shares=b.cpu_shares, mem_limit=b.mem_limit, timeout_seconds=b.timeout_seconds)
+    runner = DockerRunner(
+        image=b.container_image,
+        workdir=b.workdir,
+        env=b.env,
+        cpu_shares=b.cpu_shares,
+        mem_limit=b.mem_limit,
+        timeout_seconds=b.timeout_seconds,
+    )
     status, logs = runner.run(repo_dir, b.command)
     return {"status": status, "logs": logs}

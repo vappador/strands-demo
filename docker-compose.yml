@@ -2,45 +2,58 @@ services:
   agent:
     build:
       context: .
-      # optional: pass args to cache installs, etc.
-      # args:
-      #   PIP_INDEX_URL: https://pypi.org/simple
     container_name: strands-codeops-agent
     env_file:
       - .env
     environment:
-      # Verbose pipeline timeline & richer logs (toggle in .env or here)
-      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
-      - VERBOSE_RUN=${VERBOSE_RUN:-1}
-      # Silence accidental AWS IMDS lookups during local dev
-      - AWS_EC2_METADATA_DISABLED=true
-      - AWS_METADATA_SERVICE_TIMEOUT=1
-      - AWS_METADATA_SERVICE_NUM_ATTEMPTS=1
-      - BOTO_CONFIG=/dev/null
+      # Logs & timeline
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      VERBOSE_RUN: ${VERBOSE_RUN:-1}
+
+      # Force non-AWS provider & block IMDS noise
+      AWS_EC2_METADATA_DISABLED: "true"
+      AWS_METADATA_SERVICE_TIMEOUT: "1"
+      AWS_METADATA_SERVICE_NUM_ATTEMPTS: "1"
+      BOTO_CONFIG: /dev/null
+
+      # Model routing -> Ollama on the host
+      STRANDS_MODEL_PROVIDER: "ollama"
+      OLLAMA_HOST: "http://host.docker.internal:11434"
+      STRANDS_MODEL: "${STRANDS_MODEL:-qwen2.5-coder:3b}"
+
+    # Helps Linux users; harmless on macOS
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8088 --reload
     working_dir: /workspace
     ports:
       - "8088:8088"
     volumes:
-      # Live code sync (fast iterate: no rebuild needed)
       - ./:/workspace
-      # Template files (read-only is fine)
       - ./templates:/workspace/templates:ro
-      # Needed if your agent builds/runs child containers for tests
+      - ./jobs:/workspace/jobs
       - /var/run/docker.sock:/var/run/docker.sock
+
+    # Healthcheck: app AND Ollama must both be up
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8088/health >/dev/null"]
-      interval: 5s
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:8088/health >/dev/null && OURL=$${OLLAMA_HOST:-http://host.docker.internal:11434} && curl -sf \"$${OURL}/api/tags\" >/dev/null"
+        ]
+      interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 12
+      start_period: 10s
+
     restart: unless-stopped
     tty: true
     stdin_open: true
 
-    # Compose v2.22+ (Docker Desktop 4.24+) — automatic sync/rebuild
+    # Compose v2.22+ — live sync/rebuild
     develop:
       watch:
-        # 1) Sync most source changes instantly (container restarts via --reload)
         - path: .
           target: /workspace
           action: sync
@@ -53,12 +66,10 @@ services:
             - .pytest_cache/
             - jobs/
             - .venv/
-        # 2) Rebuild the image if Python deps or base image change
         - path: requirements.txt
           action: rebuild
         - path: Dockerfile
           action: rebuild
-        # 3) Ensure template tweaks sync immediately
         - path: templates
           target: /workspace/templates
           action: sync
