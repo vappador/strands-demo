@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1.7
+# Base on Python so pytest and friends are easy
+FROM python:3.11-slim AS base
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# ---- Common OS deps -------------------------------------------------
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates curl git jq bash \
+      build-essential \
+      openjdk-17-jdk maven gradle \
+    ; \
+    rm -rf /var/lib/apt/lists/*
+
+# ---- Node.js 20 LTS + Corepack (pnpm/yarn) --------------------------
+# Using NodeSource helper (fast + reliable for CI images)
+RUN set -eux; \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends nodejs; \
+    rm -rf /var/lib/apt/lists/*; \
+    corepack enable; \
+    npm --version && node --version
+
+# ---- TypeScript tooling ---------------------------------------------
+# You can rely on per-project versions via corepack; we also add global TS for convenience
+RUN set -eux; \
+    npm i -g typescript ts-node
+
+# ---- Python quality of life -----------------------------------------
+# (pytest etc. are installed at test time from the project)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# ---- Workdir matches your runner YAMLs -------------------------------
+# Your BuildSpec.workdir points here (e.g. /workspace/repo)
+WORKDIR /workspace/repo
+
+# The runner will set the exact test command; we keep the image idle-friendly.
+CMD ["bash"]
