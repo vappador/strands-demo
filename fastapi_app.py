@@ -19,16 +19,17 @@ logging.basicConfig(
 app = FastAPI(title="Strands CodeOps Agent API", version="1.0.0")
 _agent = make_agent()
 
-class RunRequest(BaseModel):
-    requirement_source: str
-    # verbose removed — driven by env
-
 
 class RunRequest(BaseModel):
+    """Request body for the /run endpoint."""
+
     requirement_source: str
     verbose: Optional[bool] = False
 
+
 class RunResponse(BaseModel):
+    """Response returned by the /run endpoint."""
+
     status: str
     branch: Optional[str] = None
     repo: Optional[str] = None
@@ -42,13 +43,20 @@ class RunResponse(BaseModel):
     elapsed_seconds: Optional[float] = None
     timeline: Optional[list] = None  # <-- new
 
+
 @app.get("/health")
-async def health():
+async def health() -> Dict[str, bool]:
+    """Simple health check endpoint."""
+
     return {"ok": True}
 
+
 @app.post("/run", response_model=RunResponse)
-async def run(req: RunRequest):
+async def run(req: RunRequest) -> RunResponse:
+    """Execute the requirement pipeline in a worker thread."""
+
     def _call():
         return _agent.tool.run_requirement_pipeline(requirement_source=req.requirement_source)
+
     return await asyncio.to_thread(_call)
 
