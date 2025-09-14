@@ -15,6 +15,7 @@ from app.tools.requirements_tool import load_requirement, RequirementLoadError
 from app.tools.git_tools import prepare_workspace, commit_and_push
 from app.tools.code_tools import plan_changes, generate_changes, apply_changes, build_and_test
 from app.tools.github_tools import open_pull_request
+from app.observability import observability
 
 log = logging.getLogger(__name__)
 
@@ -107,27 +108,34 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
     def _stage(name: str, fn, **kwargs):
         s0 = time.time()
         log.info("orchestrator: → %s", name)
+        observability.stage_start(name)
+        out = None
         try:
             out = _smart_call(fn, **kwargs)
             return out
         finally:
             dur = round(time.time() - s0, 3)
             log.info("orchestrator: ← %s (%.3fs)", name, dur)
+            preview = None
             if verbose:
                 # keep a light footprint to avoid huge responses
-                preview = None
                 try:
                     if isinstance(out, dict):
                         preview = {k: out[k] for k in list(out)[:5]}
                 except Exception:
                     pass
                 timeline.append({"stage": name, "duration_s": dur, "preview": preview})
+            observability.stage_end(name, preview)
+            observability.add_message("stage", f"{name} completed in {dur}s")
 
     # 1) load
+    observability.start_run()
     try:
         req: Requirement = load_requirement(requirement_source)
     except RequirementLoadError as e:
         log.error("orchestrator: load_requirement failed where=%s message=%s", e.where, e.message)
+        observability.add_message("error", f"load_requirement failed: {e.message}")
+        observability.finish_run("error")
         return {
             "status": "error",
             "where": e.where,
@@ -144,6 +152,7 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
         }
 
     log.info("orchestrator: start id=%s title=%s", req.id, req.title)
+    observability.add_message("system", f"start {req.id}: {req.title}")
 
     try:
         ws = _stage("prepare_workspace", prepare_workspace, req=req, ws=None)
@@ -178,6 +187,8 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
         success = str(exit_code) in ("0", "None") or exit_code == 0
         status = "success" if success else "error"
 
+        observability.finish_run(status)
+        observability.add_message("system", f"run finished: {status}")
         return {
             "status": status,
             "branch": branch,
@@ -195,6 +206,8 @@ def run_requirement_pipeline(requirement_source: str) -> dict:
 
     except Exception as e:
         log.exception("orchestrator: unhandled failure")
+        observability.add_message("error", str(e))
+        observability.finish_run("error")
         return {
             "status": "error",
             "where": "orchestrator",

@@ -7,7 +7,9 @@ import os
 from typing import Optional, Any, Dict
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from app.observability import observability
 
 from agent_main import make_agent
 
@@ -59,4 +61,42 @@ async def run(req: RunRequest) -> RunResponse:
         return _agent.tool.run_requirement_pipeline(requirement_source=req.requirement_source)
 
     return await asyncio.to_thread(_call)
+
+
+@app.get("/status")
+async def status() -> Dict[str, Any]:
+    """Return current observability snapshot."""
+    return observability.snapshot()
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> HTMLResponse:
+    """Simple web UI to display current status and conversation."""
+    html = """
+    <html>
+    <head><title>Strands Status</title></head>
+    <body>
+    <h1>Strands Status</h1>
+    <div id='state'></div>
+    <h2>Conversation</h2>
+    <ul id='conv'></ul>
+    <script>
+    async function refresh() {
+        const res = await fetch('/status');
+        const data = await res.json();
+        document.getElementById('state').innerText = 'Status: ' + data.status + ' | Stage: ' + data.current_stage;
+        const ul = document.getElementById('conv');
+        ul.innerHTML = '';
+        data.conversation.forEach(m => {
+            const li = document.createElement('li');
+            li.textContent = m.role + ': ' + m.content;
+            ul.appendChild(li);
+        });
+    }
+    refresh();
+    setInterval(refresh, 1000);
+    </script>
+    </body></html>
+    """
+    return HTMLResponse(html)
 
