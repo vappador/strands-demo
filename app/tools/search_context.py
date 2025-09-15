@@ -33,12 +33,12 @@ def search_context(
     Uses ripgrep to locate matching lines, then reads surrounding context from disk.
     Output is capped by ``max_results`` and ``max_chars`` to avoid oversized payloads.
     """
+    
     if repo_dir is None:
         ws = runtime.get_workspace()
         repo_dir = (ws or {}).get("repo_dir") if ws else None
     if not repo_dir:
         raise ValueError("search_context: repo_dir not provided and no workspace set")
-
     if not query.strip():
         return {"query": query, "results": [], "truncated": False}
 
