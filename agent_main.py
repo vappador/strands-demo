@@ -16,6 +16,7 @@ from app.tools.requirements_tool import load_requirement  # tool (kept)
 from app.tools.git_tools import prepare_workspace, commit_and_push
 from app.tools.code_tools import plan_changes, generate_changes, apply_changes, build_and_test
 from app.tools.github_tools import open_pull_request
+from app.tools.search_context import search_context
 from app.orchestrator import run_requirement_pipeline
 from app import runtime
 
@@ -50,6 +51,7 @@ def make_agent() -> Agent:
             build_and_test,
             commit_and_push,
             open_pull_request,
+            search_context,
         ],
     )
     runtime.set_agent(agent)
