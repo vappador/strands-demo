@@ -6,6 +6,7 @@ End-to-end automation from a **requirement template → PR**, exposed via an asy
 - Parse requirement YAML
 - Clone repo, create feature branch
 - Plan and generate code + tests via LLM (structured output)
+- Optional codebase search tool for additional context to generation
 - Build & test in ephemeral Docker runner
 - Commit, push, and open a PR
 - Return a structured response (status, pr_url, logs)
@@ -25,7 +26,8 @@ strands-demo
 │   │   ├── code_tools.py
 │   │   ├── git_tools.py
 │   │   ├── github_tools.py
-│   │   └── requirements_tool.py
+│   │   ├── requirements_tool.py
+│   │   └── search_context.py
 │   └── utils.py
 ├── docker-compose.yml
 ├── Dockerfile
