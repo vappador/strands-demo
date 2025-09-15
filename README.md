@@ -297,3 +297,5 @@ docker compose up --build -d
 - Build/test isolation via Docker runner; configure image+command in the template.
 - Optional OpenTelemetry export if `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 - Swap providers: Bedrock (default with AWS creds), OpenAI, or local Ollama.
+- Configure search-context limits via `SEARCH_CONTEXT_MAX_RESULTS`,
+  `SEARCH_CONTEXT_MAX_CHARS`, and `SEARCH_CONTEXT_LINES` (see `.env.example`).
