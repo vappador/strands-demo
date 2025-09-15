@@ -6,6 +6,7 @@ End-to-end automation from a **requirement template → PR**, exposed via an asy
 - Parse requirement YAML
 - Clone repo, create feature branch
 - Plan and generate code + tests via LLM (structured output)
+- Optional codebase search tool for additional context to generation (auto uses repo from `prepare_workspace`)
 - Build & test in ephemeral Docker runner
 - Commit, push, and open a PR
 - Return a structured response (status, pr_url, logs)
@@ -25,7 +26,8 @@ strands-demo
 │   │   ├── code_tools.py
 │   │   ├── git_tools.py
 │   │   ├── github_tools.py
-│   │   └── requirements_tool.py
+│   │   ├── requirements_tool.py
+│   │   └── search_context.py
 │   └── utils.py
 ├── docker-compose.yml
 ├── Dockerfile
@@ -295,3 +297,5 @@ docker compose up --build -d
 - Build/test isolation via Docker runner; configure image+command in the template.
 - Optional OpenTelemetry export if `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 - Swap providers: Bedrock (default with AWS creds), OpenAI, or local Ollama.
+- Configure search-context limits via `SEARCH_CONTEXT_MAX_RESULTS`,
+  `SEARCH_CONTEXT_MAX_CHARS`, and `SEARCH_CONTEXT_LINES` (see `.env.example`).
