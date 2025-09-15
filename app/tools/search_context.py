@@ -7,6 +7,7 @@ import subprocess
 from typing import List
 
 from strands import tool
+from app import runtime
 
 log = logging.getLogger(__name__)
 if not log.handlers:
@@ -21,8 +22,8 @@ _DEFAULT_CONTEXT_LINES = int(os.getenv("SEARCH_CONTEXT_LINES", "2"))
 
 @tool(name="search_context", description="Search repository code and return snippets for additional context.")
 def search_context(
-    repo_dir: str,
     query: str,
+    repo_dir: str | None = None,
     max_results: int = _DEFAULT_MAX_RESULTS,
     max_chars: int = _DEFAULT_MAX_CHARS,
     context_lines: int = _DEFAULT_CONTEXT_LINES,
@@ -32,6 +33,12 @@ def search_context(
     Uses ripgrep to locate matching lines, then reads surrounding context from disk.
     Output is capped by ``max_results`` and ``max_chars`` to avoid oversized payloads.
     """
+    
+    if repo_dir is None:
+        ws = runtime.get_workspace()
+        repo_dir = (ws or {}).get("repo_dir") if ws else None
+    if not repo_dir:
+        raise ValueError("search_context: repo_dir not provided and no workspace set")
     if not query.strip():
         return {"query": query, "results": [], "truncated": False}
 

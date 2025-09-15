@@ -6,7 +6,7 @@ End-to-end automation from a **requirement template → PR**, exposed via an asy
 - Parse requirement YAML
 - Clone repo, create feature branch
 - Plan and generate code + tests via LLM (structured output)
-- Optional codebase search tool for additional context to generation
+- Optional codebase search tool for additional context to generation (auto uses repo from `prepare_workspace`)
 - Build & test in ephemeral Docker runner
 - Commit, push, and open a PR
 - Return a structured response (status, pr_url, logs)

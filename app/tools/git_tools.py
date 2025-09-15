@@ -11,6 +11,7 @@ from typing import Dict
 
 from strands import tool  # type: ignore
 from git import Repo, GitCommandError  # GitPython
+from app import runtime
 
 log = logging.getLogger(__name__)
 
@@ -203,13 +204,15 @@ def prepare_workspace(run_id: str, repo_url: str, branch_name: str, base_branch:
         owner = m.group("owner")
         name = m.group("name")
 
-    return {
+    ws = {
         "repo_dir": str(repo_dir),
         "owner": owner,
         "repo_name": name,
         "branch": branch_name,
         "base": base_branch,
     }
+    runtime.set_workspace(ws)
+    return ws
 
 @tool(name="commit_and_push", description="Commit staged changes and push to origin.")
 def commit_and_push(repo_dir: str, commit_message: str) -> Dict:
