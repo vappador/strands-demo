@@ -89,12 +89,6 @@ def _resolve_repo_url(passed_repo_url: str) -> str:
 
     return _extract_clean_url(raw)
 
-
-def _run(cmd: list[str], cwd: str | None = None) -> tuple[int, str, str]:
-    p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = p.communicate()
-    return p.returncode, out, err
-
 @tool(name="prepare_workspace", description="Clone repo, checkout base, create feature branch, configure git identity & authed remote.")
 def prepare_workspace(run_id: str, repo_url: str, branch_name: str, base_branch: str = "main") -> Dict:
     """
