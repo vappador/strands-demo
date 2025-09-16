@@ -18,6 +18,8 @@ RUN set -eux; \
     microdnf -y update && microdnf -y install curl jq && microdnf clean all; \
   elif command -v dnf >/dev/null 2>&1; then \
     dnf -y install curl jq && dnf clean all; \
+  elif command -v ripgrep >/dev/null 2>&1; then \
+    dnf -y install ripgrep && dnf clean all; \
   elif command -v yum >/dev/null 2>&1; then \
     yum -y install curl jq && yum clean all; \
   else \
