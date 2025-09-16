@@ -49,6 +49,9 @@ def search_context(
     total = 0
     truncated = False
 
+    return_code: int | None = None
+    stderr_output = ""
+
     try:
         for line in proc.stdout:  # type: ignore[union-attr]
             if len(snippets) >= max_results or total >= max_chars:
@@ -84,6 +87,24 @@ def search_context(
             if truncated:
                 break
     finally:
-        proc.kill()
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except (ProcessLookupError, OSError):
+            pass
+        try:
+            return_code = proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            return_code = proc.wait()
+        if proc.stderr:
+            try:
+                stderr_output = proc.stderr.read().strip()
+            except OSError as exc:  # pragma: no cover - unlikely but defensive
+                stderr_output = f"<failed to read stderr: {exc}>"
+        if stderr_output:
+            log.warning("search_context: ripgrep stderr: %s", stderr_output)
+        if return_code not in (0, None):
+            log.warning("search_context: ripgrep exited with code %s", return_code)
 
     return {"query": query, "results": snippets, "truncated": truncated}
