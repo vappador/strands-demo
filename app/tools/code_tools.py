@@ -43,7 +43,9 @@ def _scan_repo(repo_dir: str, max_files: int = 250) -> str:
     Return a newline-separated inventory of (relative) repo files, filtered for signal.
     """
     out: List[str] = []
-    for root, _dirs, files in os.walk(repo_dir):
+    for root, dirs, files in os.walk(repo_dir):
+        dirs.sort()
+        files.sort()
         parts = os.path.relpath(root, repo_dir).split(os.sep)
         if parts == ["."]:
             parts = []
@@ -54,8 +56,8 @@ def _scan_repo(repo_dir: str, max_files: int = 250) -> str:
                 rel = os.path.relpath(os.path.join(root, f), repo_dir)
                 out.append(rel)
                 if len(out) >= max_files:
-                    return "\n".join(out)
-    return "\n".join(out)
+                    return "\n".join(out[:max_files])
+    return "\n".join(out[:max_files])
 
 def _safe_join(base: str, *paths: str) -> str:
     """
