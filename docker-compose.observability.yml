@@ -1,0 +1,50 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:0.99.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./ops/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - tempo
+      - prometheus
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./ops/tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "3200:3200"
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tempo
+      - prometheus
+
+  agent:
+    environment:
+      OTEL_SERVICE_NAME: "strands-codeops-agent"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_CONSOLE_EXPORT: "1"
+    depends_on:
+      otel-collector:
+        condition: service_started

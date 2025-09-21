@@ -287,10 +287,38 @@ curl -sS localhost:8088/run -X POST -H "Content-Type: application/json"       -d
 
 ```bash
 cp .env.example .env
-# configure STRANDS_MODEL_PROVIDER + GITHUB_TOKEN
 
-docker compose up --build -d
-# then call the API as shown above
+chmod +x scripts/stack.sh
+
+# Build everything (incl. polytest image) and start all services
+scripts/stack.sh build-start
+
+# or the alias
+scripts/stack.sh up-all
+
+
+# Start EVERYTHING (base + observability override if present)
+scripts/stack.sh start
+
+# Stop all (no removals)
+scripts/stack.sh stop
+
+# Status / logs
+scripts/stack.sh status
+scripts/stack.sh logs
+
+# Bring down cleanly (removes containers + network)
+scripts/stack.sh down
+
+# Observability only (start/stop/logs)
+scripts/stack.sh obs:start
+scripts/stack.sh obs:stop
+scripts/stack.sh obs:logs
+
+# Build polytest image on demand (won't run it)
+scripts/stack.sh polytest-build
+
+
 ```
 
 ## Notes

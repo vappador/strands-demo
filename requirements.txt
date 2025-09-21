@@ -7,3 +7,6 @@ fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 strands-agents[ollama]>=1.7.0
 ripgrep
+opentelemetry-distro
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests

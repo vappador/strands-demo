@@ -1,0 +1,26 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+      grpc:
+
+processors:
+  batch: {}
+
+exporters:
+  otlphttp/tempo:
+    endpoint: http://tempo:3200
+    traces_endpoint: http://tempo:3200/otlp/v1/traces
+  prometheus:
+    endpoint: 0.0.0.0:9464
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]

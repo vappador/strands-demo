@@ -1,4 +1,4 @@
-# fastapi_app.py
+# app/fastapi_app.py
 from __future__ import annotations
 
 import asyncio
@@ -9,19 +9,29 @@ from typing import Optional, Any, Dict
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from app.observability import observability
 
+from app.observability import observability, _init_otel_tracing_once
 from agent_main import make_agent
 
+# ------------------------------------------------------------------ logging
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 
+# ------------------------------------------------------------------ OTEL init
+# Make sure OTEL tracing is initialized before FastAPI app is created
+try:
+    _init_otel_tracing_once()
+except Exception as e:
+    logging.getLogger(__name__).warning("OTEL init failed: %s", e)
+
+# ------------------------------------------------------------------ FastAPI app
 app = FastAPI(title="Strands CodeOps Agent API", version="1.0.0")
 _agent = make_agent()
 
 
+# ------------------------------------------------------------------ models
 class RunRequest(BaseModel):
     """Request body for the /run endpoint."""
 
@@ -43,13 +53,13 @@ class RunResponse(BaseModel):
     message: Optional[str] = None
     validation_errors: Optional[list] = None
     elapsed_seconds: Optional[float] = None
-    timeline: Optional[list] = None  # <-- new
+    timeline: Optional[list] = None  # include timeline from observability
 
 
+# ------------------------------------------------------------------ endpoints
 @app.get("/health")
 async def health() -> Dict[str, bool]:
     """Simple health check endpoint."""
-
     return {"ok": True}
 
 
@@ -58,14 +68,18 @@ async def run(req: RunRequest) -> RunResponse:
     """Execute the requirement pipeline in a worker thread."""
 
     def _call():
-        return _agent.tool.run_requirement_pipeline(requirement_source=req.requirement_source)
+        # This will use observability spans/events underneath
+        return _agent.tool.run_requirement_pipeline(
+            requirement_source=req.requirement_source,
+            stream=True,
+        )
 
     return await asyncio.to_thread(_call)
 
 
 @app.get("/status")
 async def status() -> Dict[str, Any]:
-    """Return current observability snapshot."""
+    """Return current observability snapshot (for UI polling)."""
     return observability.snapshot()
 
 
@@ -99,4 +113,3 @@ async def index() -> HTMLResponse:
     </body></html>
     """
     return HTMLResponse(html)
-

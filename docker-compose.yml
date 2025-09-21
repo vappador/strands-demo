@@ -1,23 +1,18 @@
 services:
   # Builds the polyglot test image and exits immediately.
   polytest:
+    profiles: ["builder"]     # only included when you explicitly build
+    restart: "no"             # never auto-restart
+    network_mode: "none"      # cannot attach to project network
     build:
       context: .
       dockerfile: Dockerfile.polytest
-      # Uncomment if you need to force a specific architecture on Apple Silicon:
-      # platforms:
-      #   - linux/amd64
     image: strands/polytest:latest
     command: ["/bin/true"]
-    # no volumes/ports needed
 
   agent:
     build:
       context: .
-    depends_on:
-      polytest:
-        condition: service_completed_successfully
-
     container_name: strands-codeops-agent
     env_file:
       - .env
@@ -30,6 +25,14 @@ services:
       AWS_METADATA_SERVICE_TIMEOUT: "1"
       AWS_METADATA_SERVICE_NUM_ATTEMPTS: "1"
       BOTO_CONFIG: /dev/null
+
+      OTEL_SERVICE_NAME: "strands-codeops-agent"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_METRICS_EXPORTER: "otlp"
+      # keep console if you want spans in logs too:
+      OTEL_CONSOLE_EXPORT: "1"
+
 
       # Model routing -> Ollama on the host
       STRANDS_MODEL_PROVIDER: "ollama"
